@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: "If you use this software or the accompanying data, please cite the article below."
+title: "Omnipolar-EGMs-in-staggered-arrangement-of-electrodes"
+abstract: >-
+  Simulation data and a minimal Python code example accompanying the study on
+  staggered high-density multielectrode arrangements for omnipolar electrogram
+  (oEGM) sensing in cardiac electrophysiology.
+type: software
+authors:
+  - family-names: "Alós"
+    given-names: "Raúl"
+    affiliation: "ITACA Institute, Universitat Politècnica de València"
+  - family-names: "Ramírez"
+    given-names: "Elisa"
+    affiliation: "ITACA Institute, Universitat Politècnica de València"
+  - family-names: "Peris"
+    given-names: "Alfred"
+    affiliation: "IUMPA Institute, Universitat Politècnica de València"
+  - family-names: "Millet"
+    given-names: "José"
+    affiliation: "ITACA Institute, Universitat Politècnica de València"
+  - family-names: "Castells"
+    given-names: "Francisco"
+    affiliation: "ITACA Institute, Universitat Politècnica de València"
+license: CC-BY-4.0
+repository-code: "https://github.com/RaulAlos/Omnipolar-EGMs-in-staggered-arrangement-of-electrodes"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21671892"
+    description: "Simulation dataset archived on Zenodo"
+preferred-citation:
+  type: article
+  title: "Staggered arrangement of high-density multielectrodes for improved omnipolar sensing in cardiac electrophysiology: an in silico study"
+  authors:
+    - family-names: "Alós"
+      given-names: "Raúl"
+    - family-names: "Ramírez"
+      given-names: "Elisa"
+    - family-names: "Peris"
+      given-names: "Alfred"
+    - family-names: "Millet"
+      given-names: "José"
+    - family-names: "Castells"
+      given-names: "Francisco"
+  journal: "Computers in Biology and Medicine"
+  volume: 214
+  start: 111866
+  year: 2026
+  doi: "10.1016/j.compbiomed.2026.111866"
+  issn: "0010-4825"
