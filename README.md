@@ -120,9 +120,8 @@ Each dataset is stored as plain-text CSV:
 
 ## Data availability
 
-The code is hosted in this repository; the simulation data (electrograms) is
-archived on Zenodo at https://doi.org/10.5281/zenodo.21671892 (CC BY 4.0),
-because the `*_egms.csv` files exceed GitHub's 100 MB per-file limit.
+The code is hosted in this repository; the simulation data (electrograms and coordinates) is
+archived on Zenodo at https://doi.org/10.5281/zenodo.21671892 (CC BY 4.0).
 
 ## Citation
 
