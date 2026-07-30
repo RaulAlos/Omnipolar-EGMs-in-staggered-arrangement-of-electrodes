@@ -12,22 +12,25 @@
 # doi:10.1016/j.compbiomed.2026.111866
 #
 # Description:
-# Minimal reproducibility example (Python port of main.m). For a chosen
-# tissue, anisotropy, lesion size, interelectrode distance and catheter
-# position/orientation, it loads the unified simulation data (CSV produced
-# by mat_to_csv.py), overlays both catheters on the amplitude and LAT maps,
-# and for the five clique geometries at several nearby random positions
-# (freeze groups) reconstructs the local E-field, omnipole and residual via
-# grid_omnipolar(), showing ROR / LAT error and the per-clique signals.
+# Reproducibility example. For a chosen tissue, anisotropy, lesion
+# size, interelectrode distance and catheter position/orientation, it loads
+# the unified simulation data, overlays both catheters on the amplitude and
+# LAT maps, and for the five clique geometries at several nearby random
+# positions (freeze groups) computes the bipolar EGMs (compute_b_egm /
+# compute_b_egm_staggered) and the omnipole, ROR and LAT error
+# (compute_o_egm), then plots the unipoles, bipoles, omnipole+residual and
+# bipolar loops.
 #
-# Requires: numpy, scipy, matplotlib, and functions.py
-# CSV data files must be in the same folder (run mat_to_csv.py once).
+# Configuration is set in the CONFIG block below (cfg.*).
+#
+# Requires: functions.py, omnipolar.py
 # *************************************************************************
 import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from functions import apply_rotation_to_mesh, grid_omnipolar, movmean, sample_field
+from functions import apply_rotation_to_mesh, movmean, sample_field
+from omnipolar import compute_b_egm, compute_b_egm_staggered, compute_o_egm
 
 # ---- CONFIGURATION ------------------------------------------------------
 # Defaults below; override from the terminal, e.g.:
@@ -36,7 +39,7 @@ p = argparse.ArgumentParser(description='Minimal omnipolar reproducibility examp
 p.add_argument('--tissue', choices=['healthy', 'fibrotic'], default='healthy')
 p.add_argument('--aniso',  choices=['03', '05', '07'], default='07')
 p.add_argument('--model',  choices=['R1', 'R15', 'R2'], default='R2')  # fibrotic lesion size
-p.add_argument('--d',        type=int,   default=5)   # interelectrode distance (mm)
+p.add_argument('--d',        type=int,   default=3)   # interelectrode distance (mm)
 p.add_argument('--Psi',      type=float, default=0)  # catheter rotation (deg)
 p.add_argument('--shift_x',  type=float, default=0)   # displacement X (mm)
 p.add_argument('--shift_y',  type=float, default=0)   # displacement Y (mm)
@@ -82,29 +85,32 @@ XS, YS = XS + cfg['shift_x'] * 1000, YS + cfg['shift_y'] * 1000
 xo, yo = XO.flatten('F'), YO.flatten('F')     # column-major = paper node order
 xs, ys = XS.flatten('F'), YS.flatten('F')
 
-# name, catheter, geometry, node indices (0-based)
+# name, grid, method, node indices (0-based)
+#   rect: node order = 2x2 cell [top-left, top-right, bottom-left, bottom-right]
+#         method = compute_b_egm mode (5 mean-square, 6 cross, 1-4 triangular)
+#   stag: method = geometry name for compute_b_egm_staggered
 specs = [
-    ('Cross',              'optrell', 'SQ',  np.array([1, 7, 8, 2]) - 1),
-    ('Right Triangular',   'optrell', 'TRI', np.array([1, 8, 2]) - 1),
-    ('Regular Triangular', 'stag',    'TRI', np.array([1, 7, 2]) - 1),
-    ('Rhomboid',           'stag',    'RH',  np.array([2, 8, 7, 9]) - 1),
-    ('Hexagonal',          'stag',    'HEX', np.array([7, 13, 8, 14, 15, 9, 2]) - 1),
+    ('Cross',              'rect', 5,            np.array([1, 7, 2, 8]) - 1),
+    ('Right Triangular',   'rect', 2,            np.array([1, 7, 2, 8]) - 1),
+    ('Regular Triangular', 'stag', 'triangular', np.array([1, 7, 2]) - 1),
+    ('Rhomboid',           'stag', 'rhomboid',   np.array([2, 8, 7, 9]) - 1),
+    ('Hexagonal',          'stag', 'hexagonal',  np.array([7, 13, 8, 14, 15, 9, 2]) - 1),
 ]
 nGeo = len(specs)
 
-# freeze groups: nearby random offsets (uniform in a disk), same for both grids
+# freeze groups: nearby random offsets, same for both grids
 radius_mm = cfg['d']
 ang_g = 2 * np.pi * np.random.rand(cfg['n_groups'])
 rad_g = radius_mm * np.sqrt(np.random.rand(cfg['n_groups']))
 off = np.column_stack([rad_g * np.cos(ang_g), rad_g * np.sin(ang_g)]) * 1000
 
 mk = lambda x, idx: np.append(x[idx], x[idx].mean())   # node coords + centroid
-grids = {'optrell': (xo, yo), 'stag': (xs, ys)}
+grids = {'rect': (xo, yo), 'stag': (xs, ys)}
 inst = []
 for g in range(cfg['n_groups']):
-    for name, cath, geom, idx in specs:
-        gx, gy = grids[cath]
-        inst.append(dict(group=g, name=name, cath=cath, geom=geom,
+    for name, grid, method, idx in specs:
+        gx, gy = grids[grid]
+        inst.append(dict(group=g, name=name, grid=grid, method=method,
                          x=mk(gx, idx) + off[g, 0], y=mk(gy, idx) + off[g, 1]))
 
 # ---- MAPS ---------------------------------------------------------------
@@ -125,7 +131,7 @@ for ax, (val, ttl) in zip(axs, [(amp, f"Amplitude map ({cfg['tissue']}, ar={cfg[
     fig.colorbar(sc, ax=ax)
 fig.tight_layout()
 
-# ---- SAMPLE FIELD -> OMNIPOLE ------------------------------------------
+# ---- SAMPLE FIELD -------------------------------------------------------
 query, rng_c = [], []
 for k in inst:
     n0 = len(query)
@@ -142,27 +148,34 @@ for j, k in enumerate(inst):
     a, b = rng_c[j]
     k['pot'] = P[a:b, :]
 
+# ---- BIPOLES -> OMNIPOLE (per freeze group) -----------------------------
 for g in range(cfg['n_groups']):
-    cliques = {'optrell': {}, 'stag': {},
-               'params': [d, cfg['Psi'], cfg['shift_x'], float(cfg['aniso'])]}
     idxg = [j for j, k in enumerate(inst) if k['group'] == g]
-    for j in idxg:
-        k = inst[j]
-        nod, cen = k['pot'][:-1, :], k['pot'][-1, :]
-        cliques[k['cath']][k['geom']] = dict(
-            node_pot=nod[np.newaxis, :, :],
-            centroid_pot=cen[np.newaxis, :],
-            centroid_coords=np.array([[k['x'][-1], k['y'][-1]]]))
-    R = grid_omnipolar(cliques)
-    for j in idxg:
-        k = inst[j]
-        Rk = R[k['cath']][k['geom']]
-        k['Ef'] = Rk['localEfield']
-        k['oegm'] = Rk['omnipolar'][0]
-        k['ROR'] = Rk['performance'][0, 1]
-        k['eLAT'] = Rk['performance'][0, 0] * 1000
 
-# ---- SIGNALS (one window per freeze group) ------------------------------
+    b_stack, gt_stack = [], []
+    for j in idxg:
+        k = inst[j]
+        nodes = k['pot'][:-1, :]        # node unipolar EGMs
+        gt = k['pot'][-1, :]            # clique-centre unipole (LAT gold standard)
+        if k['grid'] == 'rect':
+            b = compute_b_egm(nodes, 2, 2, k['method'])         # [2 x T]
+        else:
+            b = compute_b_egm_staggered(nodes, k['method'], d)  # [2 x T]
+        k['Ef'] = b
+        b_stack.append(b)
+        gt_stack.append(gt)
+
+    b_egm = np.vstack(b_stack)          # [2*nGeo x T]
+    centroid_gt = np.vstack(gt_stack)   # [nGeo x T]
+    o_egm, ror, lat, ang = compute_o_egm(b_egm, centroid_gt, fs=cfg['fs_native'] * 100)
+
+    for i, j in enumerate(idxg):
+        k = inst[j]
+        k['oegm'] = o_egm[2 * i:2 * i + 2, :]   # [main; residual]
+        k['ROR'] = ror[i]
+        k['eLAT'] = lat[i] * 1000               # ms
+
+# ---- SIGNALS ------------------------------
 fs = cfg['fs_native'] * 100
 tvec = np.arange(inst[0]['pot'].shape[1]) / fs * 1000
 kref = next(k for k in inst if k['group'] == 0 and k['name'] == 'Cross')
@@ -172,7 +185,7 @@ xwin = (max(tvec[0], tvec[iact] - 100), min(tvec[-1], tvec[iact] + 200))
 for g in range(cfg['n_groups']):
     byname = {k['name']: k for k in inst if k['group'] == g}
     fig, ax = plt.subplots(nGeo, 4, figsize=(15, 9), num=f'Freeze group {g + 1}')
-    for s, (name, cath, geom, idx) in enumerate(specs):
+    for s, (name, grid, method, idx) in enumerate(specs):
         k = byname[name]
         last = (s == nGeo - 1)
 

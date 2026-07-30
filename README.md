@@ -1,6 +1,6 @@
 # Omnipolar EGMs in a staggered arrangement of electrodes
 
-Simulation data and a Python example accompanying the study:
+Simulation data and example accompanying the study:
 
 > **Staggered arrangement of high-density multielectrodes for improved omnipolar sensing in cardiac electrophysiology: an in silico study.**
 > Raúl Alós, Elisa Ramírez, Alfred Peris, José Millet, Francisco Castells.
@@ -32,7 +32,8 @@ catheter position/orientation, `main.py`:
 
 ```
 ├── main.py                     Reproducibility example (entry point)
-├── functions.py                Core functions (E-field, omnipole, ROR, LAT, helpers)
+├── omnipolar.py                Bipolar / omnipolar EGM computation (ROR, LAT error)
+├── functions.py                Geometry and field-sampling helpers
 ├── requirements.txt
 ├── LICENSE                     CC BY 4.0
 └── CITATION.cff
@@ -111,16 +112,41 @@ Each dataset is stored as plain-text CSV:
 - `*_nucl_bound.csv` / `*_fibro_bound_full.csv` — (fibrotic only) core and
   full-lesion boundary contours.
 
-## Notes
+## Simulation methodology
 
-- The field sampling uses linear (barycentric) interpolation; the original study
-  used natural-neighbour interpolation, so ROR / LAT values may differ marginally.
-- Freeze-group positions are drawn at random within a small radius; run to run
-  they will vary slightly.
+Electrograms were generated with [openCARP](https://opencarp.org/) using a
+pseudo-bidomain formulation. The repository shares the **superior (top) surface**
+of the 3-D simulated tissue — the extracellular potential sampled on the upper
+layer where the virtual electrodes are placed.
+
+**Tissue and meshes.** Three 3-D slabs of healthy ventricular tissue
+(Ten Tusscher–Panfilov ionic model), 8 × 8 × 0.5 cm, were immersed in a
+conductive blood bath of 8 × 8 × 1 cm and meshed with tetrahedral elements at a
+spatial resolution (node spacing) of 0.03 cm (300 µm). Node coordinates in the
+`*_coords.csv` files are in micrometres on that surface.
+
+**Anisotropy and conduction velocity.** The longitudinal conduction velocity
+was fixed at 1.5 m/s, and the transverse/longitudinal conductivities were tuned
+to anisotropy ratios ar = 0.3, 0.5 and 0.7, yielding three propagation patterns
+of increasing wavefront planarity.
+
+**Stimulation and recording.** A single 1 ms intracellular stimulus was applied
+at t = 100 ms, eliciting one tissue activation. Extracellular potentials were
+recorded at a temporal resolution of 1 ms (sampling frequency 1 kHz); the
+healthy recordings span a single beat (1000 samples, ≈1 s). Unipolar EGMs were
+obtained by spatially sampling the extracellular potential with 6 × 8 virtual
+electrode arrays (rectangular and staggered).
+
+**Fibrotic tissue.** Fibrosis was induced by ionic remodeling embedded at the
+centre of the tissue as three spherical regions of 2, 3 and 4 cm diameter and
+0.5 cm thickness (files tagged `R1`, `R15`, `R2`). The inner 75 % of each region
+is the lesion core (homogeneous remodeling) and the outer 25 % the border zone
+(healthy and remodeled elements in equal proportion); the `*_nucl_bound.csv` and
+`*_fibro_bound_full.csv` files give the corresponding contours.
 
 ## Data availability
 
-The code is hosted in this repository; the simulation data (electrograms and coordinates) is
+The code is hosted in this repository; the simulation data (electrograms) is
 archived on Zenodo at https://doi.org/10.5281/zenodo.21671892 (CC BY 4.0).
 
 ## Citation
